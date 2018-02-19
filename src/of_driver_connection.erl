@@ -65,7 +65,7 @@
                  connection_init = false :: boolean(),
                  handler_state           :: term(),
                  pending_msgs            :: term(),
-                 xid = 0                 :: integer(),
+                 xid = 1                 :: integer(),
                  startup_leftovers       :: binary(),
                  idle_timer_poller       :: term(),
                  last_receive            :: term()
