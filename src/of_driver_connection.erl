@@ -113,7 +113,7 @@ init([Socket]) ->
                 port                = Port,
                 pending_msgs        = gb_trees:empty(),
                 idle_timer_poller   = ITRef,
-                last_receive        = now()
+                last_receive        = erlang:timestamp()
             }};
         R ->
             {stop, R}
@@ -197,7 +197,7 @@ maybe_ping(#?STATE{
                 ping_idle = PingIdle,
                 last_receive = LastReceive,
                 ping_xid = undefined} = State) ->
-    case timer:now_diff(now(), LastReceive) > 1000 * PingIdle of
+    case timer:now_diff(erlang:timestamp(), LastReceive) > 1000 * PingIdle of
         false ->
             State;
         _ ->
@@ -304,7 +304,7 @@ do_handle_tcp(#?STATE{ parser = Parser, version = Version } = State, Data) ->
                 {ok, NewState} ->
                     {noreply, NewState#?STATE{
                                         parser = NewParser,
-                                        last_receive = now()}};
+                                        last_receive = erlang:timestamp()}};
                 {stop, Reason, NewState} ->
                     {stop, Reason, NewState}
             end;
@@ -313,7 +313,7 @@ do_handle_tcp(#?STATE{ parser = Parser, version = Version } = State, Data) ->
             {ok, EmptyParser} = ofp_parser:new(Version),
             State#?STATE{
                     parser = EmptyParser,
-                    last_receive = now()};
+                    last_receive = erlang:timestamp()};
         _Else ->
             close_of_connection(State,parse_error)
     end.  
