@@ -469,6 +469,14 @@ close_of_connection(#?STATE{socket = Socket} = State, failed_version_negotiation
     ?WARNING("connection terminated: version negotiation failed"),
     ok = terminate_connection(Socket),
     {stop, normal, State#?STATE{socket = undefined}};
+close_of_connection(
+        #?STATE{
+            socket = Socket,
+            handler_state = HandlerState,
+            datapath_mac  = DatapathMac
+        } = State, tcp_closed) when HandlerState == undefined orelse DatapathMac == undefined ->
+    ok = terminate_connection(Socket),
+    {stop, normal, State#?STATE{socket = undefined}};
 close_of_connection(#?STATE{socket        = Socket,
                             datapath_mac  = DatapathMac,
                             aux_id        = AuxID,
