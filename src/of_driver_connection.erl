@@ -65,7 +65,7 @@
                  connection_init = false :: boolean(),
                  handler_state           :: term(),
                  pending_msgs            :: term(),
-                 xid = 0                 :: integer(),
+                 xid = 1                 :: integer(),
                  startup_leftovers       :: binary(),
                  idle_timer_poller       :: term(),
                  last_receive            :: term()
@@ -86,34 +86,38 @@ start_link(Socket) ->
 
 init([Socket]) ->
     Protocol = tcp,
-    of_driver_utils:setopts(Protocol, Socket, [{active, once}]),
-    {ok, {Address, Port}} = inet:peername(Socket),
-    SwitchHandler = of_driver_utils:conf_default(callback_module, fun erlang:is_atom/1, of_driver_default_handler),
-    PingEnable = of_driver_utils:conf_default(enable_ping, fun erlang:is_atom/1, false),
-    PingTimeout = of_driver_utils:conf_default(ping_timeout, fun erlang:is_integer/1, 1000),
-    PingIdle = of_driver_utils:conf_default(ping_idle, fun erlang:is_integer/1, 5000),
-    IdlePollInt = of_driver_utils:conf_default(idle_timeout_poll, fun erlang:is_integer/1, 1000),
-    MultipartTimeout = of_driver_utils:conf_default(multipart_timeout, fun erlang:is_integer/1, 30000),
-    Opts = of_driver_utils:conf_default(init_opt, []),
-    ?INFO("Connected to Switch on ~s:~p. Connection : ~p \n",[inet_parse:ntoa(Address), Port, self()]),
-    Versions = of_driver_utils:conf_default(of_compatible_versions, fun erlang:is_list/1, [3, 4]),
-    ok = gen_server:cast(self(), {send, hello}),
-    ITRef = maybe_idle_check(PingEnable, IdlePollInt),
-    {ok, #?STATE{ switch_handler      = SwitchHandler,
-                  switch_handler_opts = Opts,
-                  ping_timeout        = PingTimeout,
-                  ping_idle           = PingIdle,
-                  idle_poll_interval  = IdlePollInt,
-                  multipart_timeout   = MultipartTimeout,
-                  socket              = Socket,
-                  ctrl_versions       = Versions,
-                  protocol            = Protocol,
-                  address             = Address,
-                  port                = Port,
-                  pending_msgs        = gb_trees:empty(),
-                  idle_timer_poller   = ITRef,
-                  last_receive        = now()
-                }}.
+    case inet:peername(Socket) of
+        {ok, {Address, Port}} ->
+            of_driver_utils:setopts(Protocol, Socket, [{active, once}]),
+            SwitchHandler = of_driver_utils:conf_default(callback_module, fun erlang:is_atom/1, of_driver_default_handler),
+            PingEnable = of_driver_utils:conf_default(enable_ping, fun erlang:is_atom/1, false),
+            PingTimeout = of_driver_utils:conf_default(ping_timeout, fun erlang:is_integer/1, 1000),
+            PingIdle = of_driver_utils:conf_default(ping_idle, fun erlang:is_integer/1, 5000),
+            IdlePollInt = of_driver_utils:conf_default(idle_timeout_poll, fun erlang:is_integer/1, 1000),
+            MultipartTimeout = of_driver_utils:conf_default(multipart_timeout, fun erlang:is_integer/1, 30000),
+            Opts = of_driver_utils:conf_default(init_opt, []),
+            ?INFO("Connected to Switch on ~s:~p. Connection : ~p \n",[inet_parse:ntoa(Address), Port, self()]),
+            Versions = of_driver_utils:conf_default(of_compatible_versions, fun erlang:is_list/1, [3, 4]),
+            ok = gen_server:cast(self(), {send, hello}),
+            ITRef = maybe_idle_check(PingEnable, IdlePollInt),
+            {ok, #?STATE{ switch_handler      = SwitchHandler,
+                switch_handler_opts = Opts,
+                ping_timeout        = PingTimeout,
+                ping_idle           = PingIdle,
+                idle_poll_interval  = IdlePollInt,
+                multipart_timeout   = MultipartTimeout,
+                socket              = Socket,
+                ctrl_versions       = Versions,
+                protocol            = Protocol,
+                address             = Address,
+                port                = Port,
+                pending_msgs        = gb_trees:empty(),
+                idle_timer_poller   = ITRef,
+                last_receive        = erlang:timestamp()
+            }};
+        R ->
+            {stop, R}
+    end.
 
 %%------------------------------------------------------------------
 
@@ -193,7 +197,7 @@ maybe_ping(#?STATE{
                 ping_idle = PingIdle,
                 last_receive = LastReceive,
                 ping_xid = undefined} = State) ->
-    case timer:now_diff(now(), LastReceive) > 1000 * PingIdle of
+    case timer:now_diff(erlang:timestamp(), LastReceive) > 1000 * PingIdle of
         false ->
             State;
         _ ->
@@ -300,7 +304,7 @@ do_handle_tcp(#?STATE{ parser = Parser, version = Version } = State, Data) ->
                 {ok, NewState} ->
                     {noreply, NewState#?STATE{
                                         parser = NewParser,
-                                        last_receive = now()}};
+                                        last_receive = erlang:timestamp()}};
                 {stop, Reason, NewState} ->
                     {stop, Reason, NewState}
             end;
@@ -309,7 +313,7 @@ do_handle_tcp(#?STATE{ parser = Parser, version = Version } = State, Data) ->
             {ok, EmptyParser} = ofp_parser:new(Version),
             State#?STATE{
                     parser = EmptyParser,
-                    last_receive = now()};
+                    last_receive = erlang:timestamp()};
         _Else ->
             close_of_connection(State,parse_error)
     end.  
@@ -389,7 +393,7 @@ handle_message(#ofp_message{xid = XID, type = barrier_reply} = Msg,
             NewPSM = delete_pending_results(XIDStatus, PSM),
             gen_server:reply(From, SyncResults),
             State#?STATE{pending_msgs = NewPSM};
-        false ->
+        none ->
             % these aren't the droids you're looking for...
             switch_handler_next_state(Msg, State)
     end;
@@ -489,6 +493,8 @@ close_of_connection(#?STATE{socket        = Socket,
     connection_close_callback(SwitchHandler, HandlerState, AuxID),
     {stop, normal, State#?STATE{socket = undefined}}.
 
+connection_close_callback(_, undefined, 0) ->
+    ok;
 connection_close_callback(Module, HandlerState, 0) ->
     Module:terminate(driver_closed_connection, HandlerState);
 connection_close_callback(Module, HandlerState, _AuxID) ->
