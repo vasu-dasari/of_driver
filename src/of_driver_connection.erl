@@ -512,8 +512,10 @@ decide_on_version([],_) ->
 decide_on_version(SupportedVersions, #ofp_message{version = CtrlHighestVersion,
                                                   body    = HelloBody}) ->
     SupportedHighestVersion = lists:max(SupportedVersions),
+    %% If higehest supported version of controller is less than or equal to
+    %% version supported by the switch, then use the controller version
     if
-        SupportedHighestVersion == CtrlHighestVersion ->
+        SupportedHighestVersion =< CtrlHighestVersion ->
             SupportedHighestVersion;
         SupportedHighestVersion >= 4 andalso CtrlHighestVersion >= 4 ->
             decide_on_version_with_bitmap(SupportedVersions, CtrlHighestVersion,
@@ -528,11 +530,18 @@ decide_on_version_with_bitmap(SupportedVersions, CtrlHighestVersion,
     Elements = HelloBody#ofp_hello.elements,
     SwitchVersions = get_opt(versionbitmap, Elements, []),
     SwitchVersions2 = lists:umerge([CtrlHighestVersion], SwitchVersions),
-    case greatest_common_version(SupportedVersions, SwitchVersions2) of
-        no_common_version ->
-            {failed, {no_common_version, SupportedVersions, SwitchVersions2}};
-        Version ->
-            Version
+    %% If versions bitmap is missing, then select lowest possible version supported
+    %% by controller
+    case SwitchVersions == [] of
+        true when SupportedVersions /= [] ->
+            lists:min(SupportedVersions);
+        _ ->
+            case greatest_common_version(SupportedVersions, SwitchVersions2) of
+                no_common_version ->
+                    {failed, {no_common_version, SupportedVersions, SwitchVersions2}};
+                Version ->
+                    Version
+            end
     end.
 
 decide_on_version_without_bitmap(SupportedVersions, CtrlHighestVersion) ->
