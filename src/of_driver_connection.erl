@@ -486,7 +486,7 @@ close_of_connection(#?STATE{socket        = Socket,
                             aux_id        = AuxID,
                             switch_handler= SwitchHandler,
                             handler_state = HandlerState} = State, Reason) ->
-    ?WARNING("connection terminated: datapath_mac(~p) aux_id(~p) reason(~p)~n",
+    ?INFO("connection terminated: daddtapath_mac(~p) aux_id(~p) reason(~p)~n",
                                                 [DatapathMac, AuxID, Reason]),
     of_driver_db:delete_connection(DatapathMac, AuxID),   
     ok = terminate_connection(Socket),
