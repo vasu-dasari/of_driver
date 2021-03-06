@@ -234,7 +234,7 @@ send_list(ConnectionPid, Msgs) ->
                        {ok, Reply :: #ofp_message{} | noreply} |
                        {error, Reason :: term()}.
 sync_send(ConnectionPid, #ofp_message{} = Msg) -> 
-    [Reply] = gen_server:call(ConnectionPid, {sync_send, [Msg]}),
+    [Reply] = gen_server:call(ConnectionPid, {sync_send, [Msg]}, 4000),
     Reply.
 
 %% @doc
